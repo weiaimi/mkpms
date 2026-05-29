@@ -33,24 +33,10 @@ jobs:
           cmake -S . -B build \
             -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc
 
-      - name: Build
+      - name: Build wxshadow
         run: |
-          cmake --build build -- -j"$(nproc)"
-
-      - name: Collect wxshadow artifacts
-        run: |
-          mkdir -p out
-
-          find build -type f -name "wxshadow.kpm" -print
-          find build -type f -name "wxshadow_client" -print
-
-          cp "$(find build -type f -name 'wxshadow.kpm' | head -n 1)" out/
-          cp "$(find build -type f -name 'wxshadow_client' | head -n 1)" out/
-
-          chmod +x out/wxshadow_client
-
-          ls -lh out
-          file out/*
+          cmake --build build --target wxshadow.kpm -- -j"$(nproc)"
+          cmake --build build --target wxshadow_client -- -j"$(nproc)"
 
       - name: Build kpatch
         run: |
@@ -61,9 +47,13 @@ jobs:
       - name: Collect artifacts
         run: |
           mkdir -p out
+
           cp "$(find build -type f -name 'wxshadow.kpm' | head -n 1)" out/
           cp "$(find build -type f -name 'wxshadow_client' | head -n 1)" out/
           cp build/kpatch out/
+
+          chmod +x out/kpatch out/wxshadow_client
+
           ls -lh out
           file out/*
 
