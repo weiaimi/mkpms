@@ -22,11 +22,25 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            git \
             cmake \
             make \
             gcc-aarch64-linux-gnu \
             binutils-aarch64-linux-gnu \
             file
+
+      - name: Update KernelPatch submodule to 0.13.1
+        run: |
+          git -C .kp fetch --tags
+          git -C .kp checkout v0.13.1 || git -C .kp checkout 0.13.1
+          git -C .kp rev-parse --short HEAD
+
+      - name: Patch kpatch version to 0.13.1
+        run: |
+          sed -i 's/#define KP_MAJOR .*/#define KP_MAJOR 0/' tools/kpatch/kpatch.c
+          sed -i 's/#define KP_MINOR .*/#define KP_MINOR 13/' tools/kpatch/kpatch.c
+          sed -i 's/#define KP_PATCH .*/#define KP_PATCH 1/' tools/kpatch/kpatch.c
+          grep -n "KP_MAJOR\|KP_MINOR\|KP_PATCH" tools/kpatch/kpatch.c
 
       - name: Configure
         run: |
@@ -60,5 +74,5 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: wxshadow-arm64
+          name: wxshadow-arm64-kp-0.13.1
           path: out/*
