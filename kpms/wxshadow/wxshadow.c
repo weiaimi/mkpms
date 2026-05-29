@@ -1349,7 +1349,7 @@ static long wxshadow_init(const char *args, const char *event, void *__user rese
     int ret;
 
     pr_info("wxshadow: initializing...\n");
-
+return 0;
     /* Resolve kernel symbols */
     ret = resolve_symbols();
     if (ret < 0) {
