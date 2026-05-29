@@ -1,0 +1,59 @@
+name: Build wxshadow
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            make \
+            gcc-aarch64-linux-gnu \
+            binutils-aarch64-linux-gnu \
+            file
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc
+
+      - name: Build
+        run: |
+          cmake --build build -- -j"$(nproc)"
+
+      - name: Collect wxshadow artifacts
+        run: |
+          mkdir -p out
+
+          find build -type f -name "wxshadow.kpm" -print
+          find build -type f -name "wxshadow_client" -print
+
+          cp "$(find build -type f -name 'wxshadow.kpm' | head -n 1)" out/
+          cp "$(find build -type f -name 'wxshadow_client' | head -n 1)" out/
+
+          chmod +x out/wxshadow_client
+
+          ls -lh out
+          file out/*
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wxshadow-arm64
+          path: out/*
