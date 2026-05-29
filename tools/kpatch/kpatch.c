@@ -22,8 +22,8 @@
 /* ---- KernelPatch ABI ---- */
 
 #define KP_MAJOR 0
-#define KP_MINOR 12
-#define KP_PATCH 3
+#define KP_MINOR 13
+#define KP_PATCH 1
 
 #define __NR_supercall      45
 
