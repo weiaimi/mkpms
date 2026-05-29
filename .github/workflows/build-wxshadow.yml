@@ -51,7 +51,219 @@ jobs:
         run: |
           cmake --build build --target wxshadow.kpm -- -j"$(nproc)"
           cmake --build build --target wxshadow_client -- -j"$(nproc)"
+      - name: Build minimal kpatch 0.13.1
+        run: |
+          cat > build/kpatch_0131.c <<'EOF'
+          #include <stdio.h>
+          #include <stdint.h>
+          #include <stdlib.h>
+          #include <string.h>
+          #include <errno.h>
+          #include <unistd.h>
+          #include <sys/syscall.h>
 
+          #define KP_MAJOR 0
+          #define KP_MINOR 13
+          #define KP_PATCH 1
+
+          #define __NR_supercall 45
+
+          #define SUPERCALL_HELLO              0x1000
+          #define SUPERCALL_HELLO_MAGIC        0x11581158
+          #define SUPERCALL_KERNELPATCH_VER    0x1008
+          #define SUPERCALL_KERNEL_VER         0x1009
+
+          #define SUPERCALL_KPM_LOAD           0x1020
+          #define SUPERCALL_KPM_UNLOAD         0x1021
+          #define SUPERCALL_KPM_CONTROL        0x1022
+          #define SUPERCALL_KPM_NUMS           0x1030
+          #define SUPERCALL_KPM_LIST           0x1031
+          #define SUPERCALL_KPM_INFO           0x1032
+
+          static long ver_and_cmd(long cmd) {
+              uint32_t ver = (KP_MAJOR << 16) | (KP_MINOR << 8) | KP_PATCH;
+              return ((long)ver << 32) | (0x1158 << 16) | (cmd & 0xffff);
+          }
+
+          static long sc_hello(const char *key) {
+              return syscall(__NR_supercall, key, ver_and_cmd(SUPERCALL_HELLO));
+          }
+
+          static uint32_t sc_kp_ver(const char *key) {
+              return (uint32_t)syscall(__NR_supercall, key, ver_and_cmd(SUPERCALL_KERNELPATCH_VER));
+          }
+
+          static uint32_t sc_k_ver(const char *key) {
+              return (uint32_t)syscall(__NR_supercall, key, ver_and_cmd(SUPERCALL_KERNEL_VER));
+          }
+
+          static long sc_kpm_load(const char *key, const char *path, const char *args) {
+              return syscall(__NR_supercall, key, ver_and_cmd(SUPERCALL_KPM_LOAD), path, args, NULL);
+          }
+
+          static long sc_kpm_unload(const char *key, const char *name) {
+              return syscall(__NR_supercall, key, ver_and_cmd(SUPERCALL_KPM_UNLOAD), name, NULL);
+          }
+
+          static long sc_kpm_nums(const char *key) {
+              return syscall(__NR_supercall, key, ver_and_cmd(SUPERCALL_KPM_NUMS));
+          }
+
+          static long sc_kpm_list(const char *key, char *buf, int len) {
+              return syscall(__NR_supercall, key, ver_and_cmd(SUPERCALL_KPM_LIST), buf, len);
+          }
+
+          static long sc_kpm_info(const char *key, const char *name, char *buf, int len) {
+              return syscall(__NR_supercall, key, ver_and_cmd(SUPERCALL_KPM_INFO), name, buf, len);
+          }
+
+          static void print_ver(uint32_t v) {
+              printf("%u.%u.%u", (v >> 16) & 0xff, (v >> 8) & 0xff, v & 0xff);
+          }
+
+          static void usage(const char *p) {
+              fprintf(stderr,
+                  "Usage:\n"
+                  "  %s <key> hello\n"
+                  "  %s <key> kpm num\n"
+                  "  %s <key> kpm list\n"
+                  "  %s <key> kpm load <path> [args]\n"
+                  "  %s <key> kpm unload <name>\n"
+                  "  %s <key> kpm info <name>\n",
+                  p, p, p, p, p, p);
+          }
+
+          int main(int argc, char **argv) {
+              if (argc < 3) {
+                  usage(argv[0]);
+                  return 1;
+              }
+
+              const char *key = argv[1];
+
+              if (strcmp(argv[2], "hello") == 0) {
+                  errno = 0;
+                  long r = sc_hello(key);
+                  if (r != SUPERCALL_HELLO_MAGIC) {
+                      fprintf(stderr, "hello failed: %ld errno=%d\n", r, errno);
+                      return 1;
+                  }
+
+                  printf("hello1158\n");
+                  printf("KernelPatch: ");
+                  print_ver(sc_kp_ver(key));
+                  printf("\nKernel:      ");
+                  print_ver(sc_k_ver(key));
+                  printf("\n");
+                  return 0;
+              }
+
+              if (strcmp(argv[2], "kpm") != 0 || argc < 4) {
+                  usage(argv[0]);
+                  return 1;
+              }
+
+              const char *sub = argv[3];
+
+              if (strcmp(sub, "num") == 0) {
+                  errno = 0;
+                  long r = sc_kpm_nums(key);
+                  if (r < 0) {
+                      fprintf(stderr, "num failed: %ld errno=%d\n", r, errno);
+                      return 1;
+                  }
+                  printf("%ld\n", r);
+                  return 0;
+              }
+
+              if (strcmp(sub, "list") == 0) {
+                  char buf[8192];
+                  memset(buf, 0, sizeof(buf));
+
+                  errno = 0;
+                  long r = sc_kpm_list(key, buf, sizeof(buf) - 1);
+                  if (r < 0) {
+                      fprintf(stderr, "list failed: %ld errno=%d\n", r, errno);
+                      return 1;
+                  }
+
+                  if (r == 0) {
+                      printf("(no modules loaded)\n");
+                  } else {
+                      printf("%s", buf);
+                      if (buf[strlen(buf) - 1] != '\n') printf("\n");
+                  }
+                  return 0;
+              }
+
+              if (strcmp(sub, "load") == 0) {
+                  if (argc < 5) {
+                      usage(argv[0]);
+                      return 1;
+                  }
+
+                  const char *path = argv[4];
+                  const char *args = argc >= 6 ? argv[5] : NULL;
+
+                  errno = 0;
+                  long r = sc_kpm_load(key, path, args);
+                  if (r != 0) {
+                      fprintf(stderr, "load failed: %ld errno=%d\n", r, errno);
+                      return 1;
+                  }
+
+                  printf("loaded: %s\n", path);
+                  return 0;
+              }
+
+              if (strcmp(sub, "unload") == 0) {
+                  if (argc < 5) {
+                      usage(argv[0]);
+                      return 1;
+                  }
+
+                  errno = 0;
+                  long r = sc_kpm_unload(key, argv[4]);
+                  if (r != 0) {
+                      fprintf(stderr, "unload failed: %ld errno=%d\n", r, errno);
+                      return 1;
+                  }
+
+                  printf("unloaded: %s\n", argv[4]);
+                  return 0;
+              }
+
+              if (strcmp(sub, "info") == 0) {
+                  if (argc < 5) {
+                      usage(argv[0]);
+                      return 1;
+                  }
+
+                  char buf[8192];
+                  memset(buf, 0, sizeof(buf));
+
+                  errno = 0;
+                  long r = sc_kpm_info(key, argv[4], buf, sizeof(buf) - 1);
+                  if (r < 0) {
+                      fprintf(stderr, "info failed: %ld errno=%d\n", r, errno);
+                      return 1;
+                  }
+
+                  printf("%s", buf);
+                  if (buf[0] && buf[strlen(buf) - 1] != '\n') printf("\n");
+                  return 0;
+              }
+
+              usage(argv[0]);
+              return 1;
+          }
+          EOF
+
+          aarch64-linux-gnu-gcc -static -O2 -s \
+            build/kpatch_0131.c \
+            -o build/kpatch
+
+          file build/kpatch
 
       - name: Collect artifacts
         run: |
