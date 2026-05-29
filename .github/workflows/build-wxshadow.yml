@@ -52,17 +52,6 @@ jobs:
           cmake --build build --target wxshadow.kpm -- -j"$(nproc)"
           cmake --build build --target wxshadow_client -- -j"$(nproc)"
 
-      - name: Build official kpatch 0.13.1
-        run: |
-          git clone --depth 1 --branch 0.13.1 https://github.com/bmax121/KernelPatch.git KernelPatch || \
-          git clone --depth 1 --branch v0.13.1 https://github.com/bmax121/KernelPatch.git KernelPatch
-
-          find KernelPatch -maxdepth 4 -type f | grep -E "kpatch|supercall" || true
-
-          aarch64-linux-gnu-gcc -static -O2 -s \
-            KernelPatch/user_deprecated/kpatch.c \
-            -IKernelPatch/user_deprecated \
-            -o build/kpatch
 
       - name: Collect artifacts
         run: |
