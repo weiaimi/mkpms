@@ -52,6 +52,21 @@ jobs:
           ls -lh out
           file out/*
 
+      - name: Build kpatch
+        run: |
+          aarch64-linux-gnu-gcc -static -O2 -s \
+            tools/kpatch/kpatch.c \
+            -o build/kpatch
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p out
+          cp "$(find build -type f -name 'wxshadow.kpm' | head -n 1)" out/
+          cp "$(find build -type f -name 'wxshadow_client' | head -n 1)" out/
+          cp build/kpatch out/
+          ls -lh out
+          file out/*
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
